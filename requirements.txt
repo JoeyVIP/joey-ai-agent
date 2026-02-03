@@ -25,3 +25,4 @@ sqlalchemy==2.0.36
 
 # File Upload
 python-multipart==0.0.19
+psycopg2-binary==2.9.9
