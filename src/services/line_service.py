@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from linebot.v3 import WebhookHandler
@@ -35,33 +36,41 @@ class LineService:
             logger.warning("LINE 簽名驗證失敗")
             return False
 
+    def _sync_reply_message(self, reply_token: str, message: str) -> None:
+        """同步回覆 LINE 訊息（內部使用）"""
+        with ApiClient(self.configuration) as api_client:
+            api = MessagingApi(api_client)
+            api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=reply_token,
+                    messages=[TextMessage(text=message)]
+                )
+            )
+
     async def reply_message(self, reply_token: str, message: str) -> None:
         """Reply to a LINE message."""
         try:
-            with ApiClient(self.configuration) as api_client:
-                api = MessagingApi(api_client)
-                api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=reply_token,
-                        messages=[TextMessage(text=message)]
-                    )
-                )
+            await asyncio.to_thread(self._sync_reply_message, reply_token, message)
             logger.debug(f"LINE 回覆訊息成功: {message[:50]}...")
         except Exception as e:
             logger.error(f"LINE 回覆訊息失敗: {e}")
             raise
 
+    def _sync_push_message(self, user_id: str, message: str) -> None:
+        """同步推送 LINE 訊息（內部使用）"""
+        with ApiClient(self.configuration) as api_client:
+            api = MessagingApi(api_client)
+            api.push_message(
+                PushMessageRequest(
+                    to=user_id,
+                    messages=[TextMessage(text=message)]
+                )
+            )
+
     async def push_message(self, user_id: str, message: str) -> None:
         """Push a message to a user."""
         try:
-            with ApiClient(self.configuration) as api_client:
-                api = MessagingApi(api_client)
-                api.push_message(
-                    PushMessageRequest(
-                        to=user_id,
-                        messages=[TextMessage(text=message)]
-                    )
-                )
+            await asyncio.to_thread(self._sync_push_message, user_id, message)
             logger.debug(f"LINE 推送訊息成功至 {user_id[:8]}...: {message[:50]}...")
         except Exception as e:
             logger.error(f"LINE 推送訊息失敗至 {user_id[:8]}...: {e}")

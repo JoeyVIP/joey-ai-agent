@@ -1,6 +1,8 @@
+import asyncio
 import logging
 from datetime import datetime
-from typing import Optional
+from functools import partial
+from typing import Any, Callable, Optional
 from notion_client import Client
 
 from src.config import settings
@@ -18,6 +20,12 @@ class NotionService:
         self.review_db_id = settings.notion_review_db_id
         self.memory_db_id = settings.notion_memory_db_id
         self.evolution_db_id = settings.notion_evolution_db_id
+
+    # ==================== 非同步執行輔助方法 ====================
+
+    async def _run_sync(self, func: Callable[..., Any], *args, **kwargs) -> Any:
+        """將同步函數包裝為非同步執行，避免阻塞事件循環"""
+        return await asyncio.to_thread(partial(func, *args, **kwargs))
 
     # ==================== Property 建構輔助方法 ====================
 
@@ -101,7 +109,8 @@ class NotionService:
         """Create a new task in Inbox database. Returns the page ID."""
         logger.info(f"建立 Inbox 任務: {title}")
         try:
-            response = self.client.pages.create(
+            response = await self._run_sync(
+                self.client.pages.create,
                 parent={"database_id": self.inbox_db_id},
                 properties={
                     "Name": self._build_title(title),
@@ -121,7 +130,8 @@ class NotionService:
         """Update the status of an Inbox task."""
         logger.debug(f"更新 Inbox 狀態: {page_id[:8]}... -> {status}")
         try:
-            self.client.pages.update(
+            await self._run_sync(
+                self.client.pages.update,
                 page_id=page_id,
                 properties={"Status": self._build_select(status)}
             )
@@ -133,7 +143,8 @@ class NotionService:
         """Archive (delete) an Inbox task."""
         logger.debug(f"刪除 Inbox 任務: {page_id[:8]}...")
         try:
-            self.client.pages.update(
+            await self._run_sync(
+                self.client.pages.update,
                 page_id=page_id,
                 archived=True
             )
@@ -153,7 +164,8 @@ class NotionService:
         """Create a simple review task with direct result."""
         logger.info(f"建立簡單 Review 任務: {title}")
         try:
-            response = self.client.pages.create(
+            response = await self._run_sync(
+                self.client.pages.create,
                 parent={"database_id": self.review_db_id},
                 properties={
                     "Name": self._build_title(title),
@@ -185,7 +197,8 @@ class NotionService:
         """Create a complex review task with analysis and prompt for Claude Code."""
         logger.info(f"建立複雜 Review 任務: {title}")
         try:
-            response = self.client.pages.create(
+            response = await self._run_sync(
+                self.client.pages.create,
                 parent={"database_id": self.review_db_id},
                 properties={
                     "Name": self._build_title(title),
@@ -209,7 +222,8 @@ class NotionService:
 
     async def update_review_task_status(self, page_id: str, status: str) -> None:
         """Update the status of a Review task."""
-        self.client.pages.update(
+        await self._run_sync(
+            self.client.pages.update,
             page_id=page_id,
             properties={"Status": self._build_select(status)}
         )
@@ -231,13 +245,14 @@ class NotionService:
         if folder_path:
             properties["Folder"] = self._build_rich_text(folder_path, truncate=False)
 
-        self.client.pages.update(page_id=page_id, properties=properties)
+        await self._run_sync(self.client.pages.update, page_id=page_id, properties=properties)
 
     # ==================== Memory CRUD ====================
 
     async def get_all_memories(self) -> list[dict]:
         """Fetch all memories from the Memory database."""
-        response = self.client.databases.query(
+        response = await self._run_sync(
+            self.client.databases.query,
             database_id=self.memory_db_id,
             sorts=[
                 {"property": "Importance", "direction": "ascending"},
@@ -288,7 +303,7 @@ class NotionService:
         if importance is not None:
             properties["Importance"] = self._build_select(importance)
 
-        self.client.pages.update(page_id=page_id, properties=properties)
+        await self._run_sync(self.client.pages.update, page_id=page_id, properties=properties)
 
     async def create_memory(
         self,
@@ -300,7 +315,8 @@ class NotionService:
         """Create a new memory entry."""
         logger.info(f"建立記憶: {title} ({category}, {importance})")
         try:
-            response = self.client.pages.create(
+            response = await self._run_sync(
+                self.client.pages.create,
                 parent={"database_id": self.memory_db_id},
                 properties={
                     "Name": self._build_title(title),
@@ -318,7 +334,8 @@ class NotionService:
 
     async def find_memory_by_title(self, title: str) -> Optional[dict]:
         """Find a memory by title."""
-        response = self.client.databases.query(
+        response = await self._run_sync(
+            self.client.databases.query,
             database_id=self.memory_db_id,
             filter={
                 "property": "Name",
@@ -356,7 +373,8 @@ class NotionService:
             raise ValueError("Evolution database ID not configured")
 
         try:
-            response = self.client.pages.create(
+            response = await self._run_sync(
+                self.client.pages.create,
                 parent={"database_id": self.evolution_db_id},
                 properties={
                     "Name": self._build_title(title),
@@ -380,7 +398,8 @@ class NotionService:
         if not self.evolution_db_id:
             return []
 
-        response = self.client.databases.query(
+        response = await self._run_sync(
+            self.client.databases.query,
             database_id=self.evolution_db_id,
             filter={
                 "property": "Status",
@@ -399,7 +418,7 @@ class NotionService:
     async def get_evolution_task(self, page_id: str) -> Optional[dict]:
         """Fetch a specific evolution task by ID."""
         try:
-            page = self.client.pages.retrieve(page_id=page_id)
+            page = await self._run_sync(self.client.pages.retrieve, page_id=page_id)
             return self._parse_evolution_task(page)
         except Exception as e:
             logger.warning(f"取得進化任務失敗 {page_id[:8]}...: {e}")
@@ -471,14 +490,15 @@ class NotionService:
         if "duration" in kwargs and kwargs["duration"] is not None:
             properties["Duration"] = self._build_number(kwargs["duration"])
 
-        self.client.pages.update(page_id=page_id, properties=properties)
+        await self._run_sync(self.client.pages.update, page_id=page_id, properties=properties)
 
     async def get_evolution_history(self, limit: int = 20) -> list[dict]:
         """Fetch recent evolution history."""
         if not self.evolution_db_id:
             return []
 
-        response = self.client.databases.query(
+        response = await self._run_sync(
+            self.client.databases.query,
             database_id=self.evolution_db_id,
             sorts=[
                 {"property": "CreatedAt", "direction": "descending"}

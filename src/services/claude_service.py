@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -50,8 +51,9 @@ class ClaudeService:
 請以 JSON 格式回應。"""
 
         try:
-            # Call Claude API
-            response = self.client.messages.create(
+            # Call Claude API (使用 to_thread 避免阻塞事件循環)
+            response = await asyncio.to_thread(
+                self.client.messages.create,
                 model=self.model,
                 max_tokens=CLAUDE_MAX_TOKENS,
                 system=self.system_prompt,
