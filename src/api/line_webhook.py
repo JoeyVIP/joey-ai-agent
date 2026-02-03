@@ -12,6 +12,9 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["line"])
 
+# 總管理員（Joey）
+ADMIN_USER_ID = settings.joey_line_user_id
+
 # 授權使用者清單（ID -> 名稱）
 AUTHORIZED_USERS = {
     settings.joey_line_user_id: "Joey",
@@ -28,6 +31,18 @@ async def process_message_background(user_input: str, user_id: str, user_name: s
         )
     except Exception as e:
         logger.error(f"Background task failed: {e}", exc_info=True)
+
+
+async def notify_admin(user_name: str, user_input: str):
+    """通知管理員有使用者提出請求"""
+    try:
+        # 截斷過長的訊息
+        preview = user_input[:200] + "..." if len(user_input) > 200 else user_input
+        notification = f"📢 {user_name} 提出請求：\n\n{preview}"
+        await line_service.push_to_joey(notification)
+        logger.info(f"Admin notified about {user_name}'s request")
+    except Exception as e:
+        logger.error(f"Failed to notify admin: {e}")
 
 
 @router.post("/webhook/line")
@@ -97,6 +112,10 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks):
 
         # 取得使用者名稱
         user_name = AUTHORIZED_USERS[user_id]
+        
+        # 如果不是管理員，通知管理員有人提出請求
+        if user_id != ADMIN_USER_ID:
+            await notify_admin(user_name, user_input)
         
         # 授權使用者 - 回覆確認訊息
         try:
