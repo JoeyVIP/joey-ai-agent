@@ -3,11 +3,21 @@ import json
 import hashlib
 import hmac
 import base64
+from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 
 from src.services.line_service import line_service
 from src.services.task_processor import task_processor
 from src.config import settings
+from src.constants import (
+    LINE_MESSAGE_PREVIEW_LENGTH,
+    LINE_LOG_MESSAGE_LENGTH,
+    LINE_FILE_LOG_MESSAGE_LENGTH,
+    USER_IDS_LOG_FILENAME,
+)
+
+# 專案根目錄（從 src/api/ 往上兩層）
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["line"])
@@ -37,7 +47,7 @@ async def notify_admin(user_name: str, user_input: str):
     """通知管理員有使用者提出請求"""
     try:
         # 截斷過長的訊息
-        preview = user_input[:200] + "..." if len(user_input) > 200 else user_input
+        preview = user_input[:LINE_MESSAGE_PREVIEW_LENGTH] + "..." if len(user_input) > LINE_MESSAGE_PREVIEW_LENGTH else user_input
         notification = f"📢 {user_name} 提出請求：\n\n{preview}"
         await line_service.push_to_joey(notification)
         logger.info(f"Admin notified about {user_name}'s request")
@@ -48,7 +58,7 @@ async def notify_admin(user_name: str, user_input: str):
 @router.post("/webhook/line")
 async def line_webhook(request: Request, background_tasks: BackgroundTasks):
     """LINE Webhook endpoint with user authorization."""
-    
+
     signature = request.headers.get("X-Line-Signature", "")
     if not signature:
         raise HTTPException(status_code=400, detail="Missing signature")
@@ -90,10 +100,11 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks):
         user_input = event.get("message", {}).get("text", "")
 
         # Log all incoming messages
-        with open("/Users/joeyserver/joey-ai-agent/user_ids.log", "a") as f:
-            f.write(f"User ID: {user_id}, Message: {user_input[:100]}\n")
-        
-        logger.info(f"Received message from {user_id}: {user_input[:50]}...")
+        log_file = PROJECT_ROOT / USER_IDS_LOG_FILENAME
+        with open(log_file, "a") as f:
+            f.write(f"User ID: {user_id}, Message: {user_input[:LINE_FILE_LOG_MESSAGE_LENGTH]}\n")
+
+        logger.info(f"Received message from {user_id}: {user_input[:LINE_LOG_MESSAGE_LENGTH]}...")
 
         if not user_input:
             continue
@@ -112,11 +123,11 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks):
 
         # 取得使用者名稱
         user_name = AUTHORIZED_USERS[user_id]
-        
+
         # 如果不是管理員，通知管理員有人提出請求
         if user_id != ADMIN_USER_ID:
             await notify_admin(user_name, user_input)
-        
+
         # 授權使用者 - 回覆確認訊息
         try:
             await line_service.reply_message(

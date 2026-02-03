@@ -25,6 +25,11 @@ LINE_LOG_MESSAGE_LENGTH = 50
 # LINE 檔案記錄的最大訊息長度
 LINE_FILE_LOG_MESSAGE_LENGTH = 100
 
+# ==================== 路徑相關常數 ====================
+
+# 使用者 ID 記錄檔名稱
+USER_IDS_LOG_FILENAME = "user_ids.log"
+
 # ==================== Claude Code 服務相關常數 ====================
 
 # 任務標題最大長度（用於資料夾命名）
