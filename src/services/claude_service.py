@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from anthropic import Anthropic
 
@@ -6,8 +7,11 @@ from src.config import settings
 from src.constants import CLAUDE_MAX_TOKENS
 from src.models.claude_response import ClaudeResponse
 
+logger = logging.getLogger(__name__)
+
 
 class ClaudeService:
+    """Claude API 服務"""
     def __init__(self):
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.anthropic_model
@@ -27,6 +31,8 @@ class ClaudeService:
         memories: str
     ) -> ClaudeResponse:
         """Process a task with Claude and return structured response."""
+        logger.info(f"呼叫 Claude API，模型: {self.model}")
+        logger.debug(f"使用者輸入: {user_input[:100]}...")
 
         # Build the user message with context
         user_message = f"""## Joey 的記憶
@@ -43,23 +49,29 @@ class ClaudeService:
 
 請以 JSON 格式回應。"""
 
-        # Call Claude API
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=CLAUDE_MAX_TOKENS,
-            system=self.system_prompt,
-            messages=[
-                {"role": "user", "content": user_message}
-            ]
-        )
+        try:
+            # Call Claude API
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=CLAUDE_MAX_TOKENS,
+                system=self.system_prompt,
+                messages=[
+                    {"role": "user", "content": user_message}
+                ]
+            )
 
-        # Extract text content
-        content = response.content[0].text
+            # Extract text content
+            content = response.content[0].text
+            logger.info(f"Claude API 回應成功，內容長度: {len(content)} 字元")
 
-        # Parse JSON from response
-        parsed = self._parse_json_response(content)
+            # Parse JSON from response
+            parsed = self._parse_json_response(content)
 
-        return parsed
+            return parsed
+
+        except Exception as e:
+            logger.error(f"Claude API 呼叫失敗: {e}", exc_info=True)
+            raise
 
     def _parse_json_response(self, content: str) -> ClaudeResponse:
         """Parse JSON response from Claude, handling various formats."""
@@ -72,16 +84,21 @@ class ClaudeService:
             start = content.find("```json") + 7
             end = content.find("```", start)
             json_str = content[start:end].strip()
+            logger.debug("從 ```json 區塊提取 JSON")
         elif "```" in content:
             start = content.find("```") + 3
             end = content.find("```", start)
             json_str = content[start:end].strip()
+            logger.debug("從 ``` 區塊提取 JSON")
 
         # Parse JSON
         try:
             data = json.loads(json_str)
+            logger.debug(f"JSON 解析成功，難度: {data.get('difficulty', 'unknown')}")
         except json.JSONDecodeError as e:
             # If parsing fails, create a fallback response
+            logger.warning(f"JSON 解析失敗，使用備用回應: {e}")
+            logger.debug(f"原始內容: {content[:200]}...")
             return ClaudeResponse(
                 difficulty="simple",
                 title="處理結果",

@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 from typing import Optional
 from notion_client import Client
 
 from src.config import settings
 from src.constants import NOTION_MAX_TEXT_LENGTH
+
+logger = logging.getLogger(__name__)
 
 
 class NotionService:
@@ -96,31 +99,47 @@ class NotionService:
         source: str = "line"
     ) -> str:
         """Create a new task in Inbox database. Returns the page ID."""
-        response = self.client.pages.create(
-            parent={"database_id": self.inbox_db_id},
-            properties={
-                "Name": self._build_title(title),
-                "Status": self._build_select("received"),
-                "Source": self._build_select(source),
-                "RawInput": self._build_rich_text(raw_input),
-                "ReceivedAt": self._build_date(),
-            }
-        )
-        return response["id"]
+        logger.info(f"建立 Inbox 任務: {title}")
+        try:
+            response = self.client.pages.create(
+                parent={"database_id": self.inbox_db_id},
+                properties={
+                    "Name": self._build_title(title),
+                    "Status": self._build_select("received"),
+                    "Source": self._build_select(source),
+                    "RawInput": self._build_rich_text(raw_input),
+                    "ReceivedAt": self._build_date(),
+                }
+            )
+            logger.debug(f"Inbox 任務建立成功: {response['id']}")
+            return response["id"]
+        except Exception as e:
+            logger.error(f"建立 Inbox 任務失敗: {e}", exc_info=True)
+            raise
 
     async def update_inbox_status(self, page_id: str, status: str) -> None:
         """Update the status of an Inbox task."""
-        self.client.pages.update(
-            page_id=page_id,
-            properties={"Status": self._build_select(status)}
-        )
+        logger.debug(f"更新 Inbox 狀態: {page_id[:8]}... -> {status}")
+        try:
+            self.client.pages.update(
+                page_id=page_id,
+                properties={"Status": self._build_select(status)}
+            )
+        except Exception as e:
+            logger.error(f"更新 Inbox 狀態失敗: {e}", exc_info=True)
+            raise
 
     async def delete_inbox_task(self, page_id: str) -> None:
         """Archive (delete) an Inbox task."""
-        self.client.pages.update(
-            page_id=page_id,
-            archived=True
-        )
+        logger.debug(f"刪除 Inbox 任務: {page_id[:8]}...")
+        try:
+            self.client.pages.update(
+                page_id=page_id,
+                archived=True
+            )
+        except Exception as e:
+            logger.error(f"刪除 Inbox 任務失敗: {e}", exc_info=True)
+            raise
 
     # ==================== Review CRUD ====================
 
@@ -132,19 +151,25 @@ class NotionService:
         source_task_id: str
     ) -> str:
         """Create a simple review task with direct result."""
-        response = self.client.pages.create(
-            parent={"database_id": self.review_db_id},
-            properties={
-                "Name": self._build_title(title),
-                "Difficulty": self._build_select("simple"),
-                "Status": self._build_select("pending_review"),
-                "Summary": self._build_rich_text(summary),
-                "Result": self._build_rich_text(result),
-                "ProcessedAt": self._build_date(),
-                "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
-            }
-        )
-        return response["id"]
+        logger.info(f"建立簡單 Review 任務: {title}")
+        try:
+            response = self.client.pages.create(
+                parent={"database_id": self.review_db_id},
+                properties={
+                    "Name": self._build_title(title),
+                    "Difficulty": self._build_select("simple"),
+                    "Status": self._build_select("pending_review"),
+                    "Summary": self._build_rich_text(summary),
+                    "Result": self._build_rich_text(result),
+                    "ProcessedAt": self._build_date(),
+                    "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
+                }
+            )
+            logger.debug(f"簡單 Review 任務建立成功: {response['id']}")
+            return response["id"]
+        except Exception as e:
+            logger.error(f"建立簡單 Review 任務失敗: {e}", exc_info=True)
+            raise
 
     async def create_review_task_complex(
         self,
@@ -158,23 +183,29 @@ class NotionService:
         source_task_id: str
     ) -> str:
         """Create a complex review task with analysis and prompt for Claude Code."""
-        response = self.client.pages.create(
-            parent={"database_id": self.review_db_id},
-            properties={
-                "Name": self._build_title(title),
-                "Difficulty": self._build_select("complex"),
-                "Status": self._build_select("pending_review"),
-                "Summary": self._build_rich_text(summary),
-                "Analysis": self._build_rich_text(analysis),
-                "Preparation": self._build_rich_text(preparation),
-                "PromptForClaudeCode": self._build_rich_text(prompt_for_claude_code),
-                "EstimatedTime": self._build_rich_text(estimated_time, truncate=False),
-                "Reason": self._build_rich_text(reason),
-                "ProcessedAt": self._build_date(),
-                "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
-            }
-        )
-        return response["id"]
+        logger.info(f"建立複雜 Review 任務: {title}")
+        try:
+            response = self.client.pages.create(
+                parent={"database_id": self.review_db_id},
+                properties={
+                    "Name": self._build_title(title),
+                    "Difficulty": self._build_select("complex"),
+                    "Status": self._build_select("pending_review"),
+                    "Summary": self._build_rich_text(summary),
+                    "Analysis": self._build_rich_text(analysis),
+                    "Preparation": self._build_rich_text(preparation),
+                    "PromptForClaudeCode": self._build_rich_text(prompt_for_claude_code),
+                    "EstimatedTime": self._build_rich_text(estimated_time, truncate=False),
+                    "Reason": self._build_rich_text(reason),
+                    "ProcessedAt": self._build_date(),
+                    "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
+                }
+            )
+            logger.debug(f"複雜 Review 任務建立成功: {response['id']}")
+            return response["id"]
+        except Exception as e:
+            logger.error(f"建立複雜 Review 任務失敗: {e}", exc_info=True)
+            raise
 
     async def update_review_task_status(self, page_id: str, status: str) -> None:
         """Update the status of a Review task."""
@@ -267,17 +298,23 @@ class NotionService:
         importance: str = "medium"
     ) -> str:
         """Create a new memory entry."""
-        response = self.client.pages.create(
-            parent={"database_id": self.memory_db_id},
-            properties={
-                "Name": self._build_title(title),
-                "Category": self._build_select(category),
-                "Content": self._build_rich_text(content),
-                "Importance": self._build_select(importance),
-                "UpdatedAt": self._build_date(),
-            }
-        )
-        return response["id"]
+        logger.info(f"建立記憶: {title} ({category}, {importance})")
+        try:
+            response = self.client.pages.create(
+                parent={"database_id": self.memory_db_id},
+                properties={
+                    "Name": self._build_title(title),
+                    "Category": self._build_select(category),
+                    "Content": self._build_rich_text(content),
+                    "Importance": self._build_select(importance),
+                    "UpdatedAt": self._build_date(),
+                }
+            )
+            logger.debug(f"記憶建立成功: {response['id']}")
+            return response["id"]
+        except Exception as e:
+            logger.error(f"建立記憶失敗: {e}", exc_info=True)
+            raise
 
     async def find_memory_by_title(self, title: str) -> Optional[dict]:
         """Find a memory by title."""
@@ -313,23 +350,30 @@ class NotionService:
         verification_steps: str
     ) -> str:
         """Create a new evolution task in pending status. Returns the page ID."""
+        logger.info(f"建立進化任務: {title} ({task_type}, {level})")
         if not self.evolution_db_id:
+            logger.error("Evolution database ID 未設定")
             raise ValueError("Evolution database ID not configured")
 
-        response = self.client.pages.create(
-            parent={"database_id": self.evolution_db_id},
-            properties={
-                "Name": self._build_title(title),
-                "Status": self._build_select("pending"),
-                "Type": self._build_select(task_type),
-                "Level": self._build_select(level),
-                "Description": self._build_rich_text(description),
-                "FilesModified": self._build_rich_text(files_modified),
-                "VerificationSteps": self._build_rich_text(verification_steps),
-                "CreatedAt": self._build_date(),
-            }
-        )
-        return response["id"]
+        try:
+            response = self.client.pages.create(
+                parent={"database_id": self.evolution_db_id},
+                properties={
+                    "Name": self._build_title(title),
+                    "Status": self._build_select("pending"),
+                    "Type": self._build_select(task_type),
+                    "Level": self._build_select(level),
+                    "Description": self._build_rich_text(description),
+                    "FilesModified": self._build_rich_text(files_modified),
+                    "VerificationSteps": self._build_rich_text(verification_steps),
+                    "CreatedAt": self._build_date(),
+                }
+            )
+            logger.debug(f"進化任務建立成功: {response['id']}")
+            return response["id"]
+        except Exception as e:
+            logger.error(f"建立進化任務失敗: {e}", exc_info=True)
+            raise
 
     async def get_pending_evolution_tasks(self) -> list[dict]:
         """Fetch all pending evolution tasks."""
@@ -357,7 +401,8 @@ class NotionService:
         try:
             page = self.client.pages.retrieve(page_id=page_id)
             return self._parse_evolution_task(page)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"取得進化任務失敗 {page_id[:8]}...: {e}")
             return None
 
     def _parse_evolution_task(self, page: dict) -> dict:
