@@ -53,3 +53,6 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Playwright MCP screenshots
+.playwright-mcp/
