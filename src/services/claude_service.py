@@ -3,6 +3,7 @@ from pathlib import Path
 from anthropic import Anthropic
 
 from src.config import settings
+from src.constants import CLAUDE_MAX_TOKENS
 from src.models.claude_response import ClaudeResponse
 
 
@@ -45,7 +46,7 @@ class ClaudeService:
         # Call Claude API
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=4096,
+            max_tokens=CLAUDE_MAX_TOKENS,
             system=self.system_prompt,
             messages=[
                 {"role": "user", "content": user_message}

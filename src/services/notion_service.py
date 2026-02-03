@@ -3,6 +3,7 @@ from typing import Optional
 from notion_client import Client
 
 from src.config import settings
+from src.constants import NOTION_MAX_TEXT_LENGTH
 
 
 class NotionService:
@@ -28,7 +29,7 @@ class NotionService:
                 "Name": {"title": [{"text": {"content": title}}]},
                 "Status": {"select": {"name": "received"}},
                 "Source": {"select": {"name": source}},
-                "RawInput": {"rich_text": [{"text": {"content": raw_input[:2000]}}]},
+                "RawInput": {"rich_text": [{"text": {"content": raw_input[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "ReceivedAt": {"date": {"start": datetime.now().isoformat()}},
             }
         )
@@ -66,8 +67,8 @@ class NotionService:
                 "Name": {"title": [{"text": {"content": title}}]},
                 "Difficulty": {"select": {"name": "simple"}},
                 "Status": {"select": {"name": "pending_review"}},
-                "Summary": {"rich_text": [{"text": {"content": summary[:2000]}}]},
-                "Result": {"rich_text": [{"text": {"content": result[:2000]}}]},
+                "Summary": {"rich_text": [{"text": {"content": summary[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "Result": {"rich_text": [{"text": {"content": result[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "ProcessedAt": {"date": {"start": datetime.now().isoformat()}},
                 "SourceTaskId": {"rich_text": [{"text": {"content": source_task_id}}]},
             }
@@ -92,12 +93,12 @@ class NotionService:
                 "Name": {"title": [{"text": {"content": title}}]},
                 "Difficulty": {"select": {"name": "complex"}},
                 "Status": {"select": {"name": "pending_review"}},
-                "Summary": {"rich_text": [{"text": {"content": summary[:2000]}}]},
-                "Analysis": {"rich_text": [{"text": {"content": analysis[:2000]}}]},
-                "Preparation": {"rich_text": [{"text": {"content": preparation[:2000]}}]},
-                "PromptForClaudeCode": {"rich_text": [{"text": {"content": prompt_for_claude_code[:2000]}}]},
+                "Summary": {"rich_text": [{"text": {"content": summary[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "Analysis": {"rich_text": [{"text": {"content": analysis[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "Preparation": {"rich_text": [{"text": {"content": preparation[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "PromptForClaudeCode": {"rich_text": [{"text": {"content": prompt_for_claude_code[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "EstimatedTime": {"rich_text": [{"text": {"content": estimated_time}}]},
-                "Reason": {"rich_text": [{"text": {"content": reason[:2000]}}]},
+                "Reason": {"rich_text": [{"text": {"content": reason[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "ProcessedAt": {"date": {"start": datetime.now().isoformat()}},
                 "SourceTaskId": {"rich_text": [{"text": {"content": source_task_id}}]},
             }
@@ -123,7 +124,7 @@ class NotionService:
         """Update a Review task with execution result."""
         properties = {
             "Status": {"select": {"name": status}},
-            "Result": {"rich_text": [{"text": {"content": result[:2000]}}]},
+            "Result": {"rich_text": [{"text": {"content": result[:NOTION_MAX_TEXT_LENGTH]}}]},
             "CompletedAt": {"date": {"start": datetime.now().isoformat()}}
         }
 
@@ -201,7 +202,7 @@ class NotionService:
         }
 
         if content is not None:
-            properties["Content"] = {"rich_text": [{"text": {"content": content[:2000]}}]}
+            properties["Content"] = {"rich_text": [{"text": {"content": content[:NOTION_MAX_TEXT_LENGTH]}}]}
 
         if importance is not None:
             properties["Importance"] = {"select": {"name": importance}}
@@ -221,7 +222,7 @@ class NotionService:
             properties={
                 "Name": {"title": [{"text": {"content": title}}]},
                 "Category": {"select": {"name": category}},
-                "Content": {"rich_text": [{"text": {"content": content[:2000]}}]},
+                "Content": {"rich_text": [{"text": {"content": content[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "Importance": {"select": {"name": importance}},
                 "UpdatedAt": {"date": {"start": datetime.now().isoformat()}},
             }
@@ -272,9 +273,9 @@ class NotionService:
                 "Status": {"select": {"name": "pending"}},
                 "Type": {"select": {"name": task_type}},
                 "Level": {"select": {"name": level}},
-                "Description": {"rich_text": [{"text": {"content": description[:2000]}}]},
-                "FilesModified": {"rich_text": [{"text": {"content": files_modified[:2000]}}]},
-                "VerificationSteps": {"rich_text": [{"text": {"content": verification_steps[:2000]}}]},
+                "Description": {"rich_text": [{"text": {"content": description[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "FilesModified": {"rich_text": [{"text": {"content": files_modified[:NOTION_MAX_TEXT_LENGTH]}}]},
+                "VerificationSteps": {"rich_text": [{"text": {"content": verification_steps[:NOTION_MAX_TEXT_LENGTH]}}]},
                 "CreatedAt": {"date": {"start": datetime.now().isoformat()}},
             }
         )
@@ -391,7 +392,7 @@ class NotionService:
 
         for kwarg, prop_name in field_mappings.items():
             if kwarg in kwargs and kwargs[kwarg] is not None:
-                value = str(kwargs[kwarg])[:2000]
+                value = str(kwargs[kwarg])[:NOTION_MAX_TEXT_LENGTH]
                 properties[prop_name] = {"rich_text": [{"text": {"content": value}}]}
 
         if "duration" in kwargs and kwargs["duration"] is not None:
