@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from src.database import get_db
 from src.database.models import User
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 class GitHubUserCreate(BaseModel):
     github_id: str
     username: str
-    email: str | None = None
-    avatar_url: str | None = None
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 @router.post("/github-login")
