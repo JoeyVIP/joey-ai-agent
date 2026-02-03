@@ -35,6 +35,10 @@ class Settings(BaseSettings):
         default="",
         description="Notion Memory Database ID"
     )
+    notion_evolution_db_id: str = Field(
+        default="",
+        description="Notion Evolution Database ID for tracking agent self-evolution"
+    )
 
     # Anthropic (optional for web-only mode)
     anthropic_api_key: str = Field(

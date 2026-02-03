@@ -11,6 +11,7 @@ class NotionService:
         self.inbox_db_id = settings.notion_inbox_db_id
         self.review_db_id = settings.notion_review_db_id
         self.memory_db_id = settings.notion_memory_db_id
+        self.evolution_db_id = settings.notion_evolution_db_id
 
     # ==================== Inbox CRUD ====================
 
@@ -248,6 +249,170 @@ class NotionService:
                 "importance": props["Importance"]["select"]["name"] if props["Importance"]["select"] else "medium"
             }
         return None
+
+    # ==================== Evolution CRUD ====================
+
+    async def create_evolution_task(
+        self,
+        title: str,
+        task_type: str,
+        level: str,
+        description: str,
+        files_modified: str,
+        verification_steps: str
+    ) -> str:
+        """Create a new evolution task in pending status. Returns the page ID."""
+        if not self.evolution_db_id:
+            raise ValueError("Evolution database ID not configured")
+
+        response = self.client.pages.create(
+            parent={"database_id": self.evolution_db_id},
+            properties={
+                "Name": {"title": [{"text": {"content": title}}]},
+                "Status": {"select": {"name": "pending"}},
+                "Type": {"select": {"name": task_type}},
+                "Level": {"select": {"name": level}},
+                "Description": {"rich_text": [{"text": {"content": description[:2000]}}]},
+                "FilesModified": {"rich_text": [{"text": {"content": files_modified[:2000]}}]},
+                "VerificationSteps": {"rich_text": [{"text": {"content": verification_steps[:2000]}}]},
+                "CreatedAt": {"date": {"start": datetime.now().isoformat()}},
+            }
+        )
+        return response["id"]
+
+    async def get_pending_evolution_tasks(self) -> list[dict]:
+        """Fetch all pending evolution tasks."""
+        if not self.evolution_db_id:
+            return []
+
+        response = self.client.databases.query(
+            database_id=self.evolution_db_id,
+            filter={
+                "property": "Status",
+                "select": {"equals": "pending"}
+            },
+            sorts=[
+                {"property": "CreatedAt", "direction": "ascending"}
+            ]
+        )
+
+        tasks = []
+        for page in response["results"]:
+            tasks.append(self._parse_evolution_task(page))
+        return tasks
+
+    async def get_evolution_task(self, page_id: str) -> Optional[dict]:
+        """Fetch a specific evolution task by ID."""
+        try:
+            page = self.client.pages.retrieve(page_id=page_id)
+            return self._parse_evolution_task(page)
+        except Exception:
+            return None
+
+    def _parse_evolution_task(self, page: dict) -> dict:
+        """Parse a Notion page into an evolution task dict."""
+        props = page["properties"]
+
+        def get_text(prop_name: str) -> str:
+            prop = props.get(prop_name, {})
+            if prop.get("rich_text"):
+                return prop["rich_text"][0]["plain_text"] if prop["rich_text"] else ""
+            if prop.get("title"):
+                return prop["title"][0]["plain_text"] if prop["title"] else ""
+            return ""
+
+        def get_select(prop_name: str) -> str:
+            prop = props.get(prop_name, {})
+            if prop.get("select"):
+                return prop["select"]["name"]
+            return ""
+
+        def get_date(prop_name: str) -> Optional[str]:
+            prop = props.get(prop_name, {})
+            if prop.get("date") and prop["date"].get("start"):
+                return prop["date"]["start"]
+            return None
+
+        def get_number(prop_name: str) -> Optional[int]:
+            prop = props.get(prop_name, {})
+            if prop.get("number") is not None:
+                return prop["number"]
+            return None
+
+        return {
+            "id": page["id"],
+            "title": get_text("Name"),
+            "status": get_select("Status"),
+            "type": get_select("Type"),
+            "level": get_select("Level"),
+            "description": get_text("Description"),
+            "files_modified": get_text("FilesModified"),
+            "verification_steps": get_text("VerificationSteps"),
+            "created_at": get_date("CreatedAt"),
+            "started_at": get_date("StartedAt"),
+            "completed_at": get_date("CompletedAt"),
+            "duration": get_number("Duration"),
+            "git_tag_pre": get_text("GitTagPre"),
+            "git_tag_post": get_text("GitTagPost"),
+            "git_commit_hash": get_text("GitCommitHash"),
+            "verification_result": get_text("VerificationResult"),
+            "error_message": get_text("ErrorMessage"),
+            "rollback_reason": get_text("RollbackReason"),
+            "agent_output": get_text("AgentOutput"),
+        }
+
+    async def update_evolution_task_status(
+        self,
+        page_id: str,
+        status: str,
+        **kwargs
+    ) -> None:
+        """Update evolution task status and optional fields."""
+        properties = {
+            "Status": {"select": {"name": status}}
+        }
+
+        # Handle time tracking
+        if status == "executing":
+            properties["StartedAt"] = {"date": {"start": datetime.now().isoformat()}}
+        elif status in ("completed", "failed", "rolled_back"):
+            properties["CompletedAt"] = {"date": {"start": datetime.now().isoformat()}}
+
+        # Handle optional fields
+        field_mappings = {
+            "git_tag_pre": "GitTagPre",
+            "git_tag_post": "GitTagPost",
+            "git_commit_hash": "GitCommitHash",
+            "verification_result": "VerificationResult",
+            "error_message": "ErrorMessage",
+            "rollback_reason": "RollbackReason",
+            "agent_output": "AgentOutput",
+        }
+
+        for kwarg, prop_name in field_mappings.items():
+            if kwarg in kwargs and kwargs[kwarg] is not None:
+                value = str(kwargs[kwarg])[:2000]
+                properties[prop_name] = {"rich_text": [{"text": {"content": value}}]}
+
+        if "duration" in kwargs and kwargs["duration"] is not None:
+            properties["Duration"] = {"number": kwargs["duration"]}
+
+        self.client.pages.update(page_id=page_id, properties=properties)
+
+    async def get_evolution_history(self, limit: int = 20) -> list[dict]:
+        """Fetch recent evolution history."""
+        if not self.evolution_db_id:
+            return []
+
+        response = self.client.databases.query(
+            database_id=self.evolution_db_id,
+            sorts=[
+                {"property": "CreatedAt", "direction": "descending"}
+            ],
+            page_size=limit
+        )
+
+        return [self._parse_evolution_task(page) for page in response["results"]]
 
 
 notion_service = NotionService()
