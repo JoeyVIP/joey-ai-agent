@@ -7,12 +7,85 @@ from src.constants import NOTION_MAX_TEXT_LENGTH
 
 
 class NotionService:
+    """Notion 資料庫操作服務"""
+
     def __init__(self):
         self.client = Client(auth=settings.notion_api_key)
         self.inbox_db_id = settings.notion_inbox_db_id
         self.review_db_id = settings.notion_review_db_id
         self.memory_db_id = settings.notion_memory_db_id
         self.evolution_db_id = settings.notion_evolution_db_id
+
+    # ==================== Property 建構輔助方法 ====================
+
+    @staticmethod
+    def _build_title(value: str) -> dict:
+        """建構 Notion title 屬性"""
+        return {"title": [{"text": {"content": value}}]}
+
+    @staticmethod
+    def _build_rich_text(value: str, truncate: bool = True) -> dict:
+        """建構 Notion rich_text 屬性"""
+        text = value[:NOTION_MAX_TEXT_LENGTH] if truncate else value
+        return {"rich_text": [{"text": {"content": text}}]}
+
+    @staticmethod
+    def _build_select(value: str) -> dict:
+        """建構 Notion select 屬性"""
+        return {"select": {"name": value}}
+
+    @staticmethod
+    def _build_date(value: Optional[datetime] = None) -> dict:
+        """建構 Notion date 屬性，預設為現在時間"""
+        dt = value or datetime.now()
+        return {"date": {"start": dt.isoformat()}}
+
+    @staticmethod
+    def _build_number(value: int) -> dict:
+        """建構 Notion number 屬性"""
+        return {"number": value}
+
+    # ==================== Property 解析輔助方法 ====================
+
+    @staticmethod
+    def _parse_title(props: dict, prop_name: str, default: str = "") -> str:
+        """解析 Notion title 屬性"""
+        prop = props.get(prop_name, {})
+        if prop.get("title") and len(prop["title"]) > 0:
+            return prop["title"][0]["plain_text"]
+        return default
+
+    @staticmethod
+    def _parse_rich_text(props: dict, prop_name: str, default: str = "") -> str:
+        """解析 Notion rich_text 屬性"""
+        prop = props.get(prop_name, {})
+        if prop.get("rich_text") and len(prop["rich_text"]) > 0:
+            return prop["rich_text"][0]["plain_text"]
+        return default
+
+    @staticmethod
+    def _parse_select(props: dict, prop_name: str, default: str = "") -> str:
+        """解析 Notion select 屬性"""
+        prop = props.get(prop_name, {})
+        if prop.get("select"):
+            return prop["select"]["name"]
+        return default
+
+    @staticmethod
+    def _parse_date(props: dict, prop_name: str) -> Optional[str]:
+        """解析 Notion date 屬性"""
+        prop = props.get(prop_name, {})
+        if prop.get("date") and prop["date"].get("start"):
+            return prop["date"]["start"]
+        return None
+
+    @staticmethod
+    def _parse_number(props: dict, prop_name: str) -> Optional[int]:
+        """解析 Notion number 屬性"""
+        prop = props.get(prop_name, {})
+        if prop.get("number") is not None:
+            return prop["number"]
+        return None
 
     # ==================== Inbox CRUD ====================
 
@@ -26,11 +99,11 @@ class NotionService:
         response = self.client.pages.create(
             parent={"database_id": self.inbox_db_id},
             properties={
-                "Name": {"title": [{"text": {"content": title}}]},
-                "Status": {"select": {"name": "received"}},
-                "Source": {"select": {"name": source}},
-                "RawInput": {"rich_text": [{"text": {"content": raw_input[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "ReceivedAt": {"date": {"start": datetime.now().isoformat()}},
+                "Name": self._build_title(title),
+                "Status": self._build_select("received"),
+                "Source": self._build_select(source),
+                "RawInput": self._build_rich_text(raw_input),
+                "ReceivedAt": self._build_date(),
             }
         )
         return response["id"]
@@ -39,9 +112,7 @@ class NotionService:
         """Update the status of an Inbox task."""
         self.client.pages.update(
             page_id=page_id,
-            properties={
-                "Status": {"select": {"name": status}}
-            }
+            properties={"Status": self._build_select(status)}
         )
 
     async def delete_inbox_task(self, page_id: str) -> None:
@@ -64,13 +135,13 @@ class NotionService:
         response = self.client.pages.create(
             parent={"database_id": self.review_db_id},
             properties={
-                "Name": {"title": [{"text": {"content": title}}]},
-                "Difficulty": {"select": {"name": "simple"}},
-                "Status": {"select": {"name": "pending_review"}},
-                "Summary": {"rich_text": [{"text": {"content": summary[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "Result": {"rich_text": [{"text": {"content": result[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "ProcessedAt": {"date": {"start": datetime.now().isoformat()}},
-                "SourceTaskId": {"rich_text": [{"text": {"content": source_task_id}}]},
+                "Name": self._build_title(title),
+                "Difficulty": self._build_select("simple"),
+                "Status": self._build_select("pending_review"),
+                "Summary": self._build_rich_text(summary),
+                "Result": self._build_rich_text(result),
+                "ProcessedAt": self._build_date(),
+                "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
             }
         )
         return response["id"]
@@ -90,17 +161,17 @@ class NotionService:
         response = self.client.pages.create(
             parent={"database_id": self.review_db_id},
             properties={
-                "Name": {"title": [{"text": {"content": title}}]},
-                "Difficulty": {"select": {"name": "complex"}},
-                "Status": {"select": {"name": "pending_review"}},
-                "Summary": {"rich_text": [{"text": {"content": summary[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "Analysis": {"rich_text": [{"text": {"content": analysis[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "Preparation": {"rich_text": [{"text": {"content": preparation[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "PromptForClaudeCode": {"rich_text": [{"text": {"content": prompt_for_claude_code[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "EstimatedTime": {"rich_text": [{"text": {"content": estimated_time}}]},
-                "Reason": {"rich_text": [{"text": {"content": reason[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "ProcessedAt": {"date": {"start": datetime.now().isoformat()}},
-                "SourceTaskId": {"rich_text": [{"text": {"content": source_task_id}}]},
+                "Name": self._build_title(title),
+                "Difficulty": self._build_select("complex"),
+                "Status": self._build_select("pending_review"),
+                "Summary": self._build_rich_text(summary),
+                "Analysis": self._build_rich_text(analysis),
+                "Preparation": self._build_rich_text(preparation),
+                "PromptForClaudeCode": self._build_rich_text(prompt_for_claude_code),
+                "EstimatedTime": self._build_rich_text(estimated_time, truncate=False),
+                "Reason": self._build_rich_text(reason),
+                "ProcessedAt": self._build_date(),
+                "SourceTaskId": self._build_rich_text(source_task_id, truncate=False),
             }
         )
         return response["id"]
@@ -109,9 +180,7 @@ class NotionService:
         """Update the status of a Review task."""
         self.client.pages.update(
             page_id=page_id,
-            properties={
-                "Status": {"select": {"name": status}}
-            }
+            properties={"Status": self._build_select(status)}
         )
 
     async def update_review_task_result(
@@ -123,13 +192,13 @@ class NotionService:
     ) -> None:
         """Update a Review task with execution result."""
         properties = {
-            "Status": {"select": {"name": status}},
-            "Result": {"rich_text": [{"text": {"content": result[:NOTION_MAX_TEXT_LENGTH]}}]},
-            "CompletedAt": {"date": {"start": datetime.now().isoformat()}}
+            "Status": self._build_select(status),
+            "Result": self._build_rich_text(result),
+            "CompletedAt": self._build_date(),
         }
 
         if folder_path:
-            properties["Folder"] = {"rich_text": [{"text": {"content": folder_path}}]}
+            properties["Folder"] = self._build_rich_text(folder_path, truncate=False)
 
         self.client.pages.update(page_id=page_id, properties=properties)
 
@@ -148,29 +217,12 @@ class NotionService:
         memories = []
         for page in response["results"]:
             props = page["properties"]
-
-            title = ""
-            if props.get("Name", {}).get("title"):
-                title = props["Name"]["title"][0]["plain_text"]
-
-            category = ""
-            if props.get("Category", {}).get("select"):
-                category = props["Category"]["select"]["name"]
-
-            content = ""
-            if props.get("Content", {}).get("rich_text"):
-                content = props["Content"]["rich_text"][0]["plain_text"]
-
-            importance = "medium"
-            if props.get("Importance", {}).get("select"):
-                importance = props["Importance"]["select"]["name"]
-
             memories.append({
                 "id": page["id"],
-                "title": title,
-                "category": category,
-                "content": content,
-                "importance": importance
+                "title": self._parse_title(props, "Name"),
+                "category": self._parse_select(props, "Category"),
+                "content": self._parse_rich_text(props, "Content"),
+                "importance": self._parse_select(props, "Importance", default="medium"),
             })
 
         return memories
@@ -197,15 +249,13 @@ class NotionService:
         importance: Optional[str] = None
     ) -> None:
         """Update an existing memory."""
-        properties = {
-            "UpdatedAt": {"date": {"start": datetime.now().isoformat()}}
-        }
+        properties = {"UpdatedAt": self._build_date()}
 
         if content is not None:
-            properties["Content"] = {"rich_text": [{"text": {"content": content[:NOTION_MAX_TEXT_LENGTH]}}]}
+            properties["Content"] = self._build_rich_text(content)
 
         if importance is not None:
-            properties["Importance"] = {"select": {"name": importance}}
+            properties["Importance"] = self._build_select(importance)
 
         self.client.pages.update(page_id=page_id, properties=properties)
 
@@ -220,11 +270,11 @@ class NotionService:
         response = self.client.pages.create(
             parent={"database_id": self.memory_db_id},
             properties={
-                "Name": {"title": [{"text": {"content": title}}]},
-                "Category": {"select": {"name": category}},
-                "Content": {"rich_text": [{"text": {"content": content[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "Importance": {"select": {"name": importance}},
-                "UpdatedAt": {"date": {"start": datetime.now().isoformat()}},
+                "Name": self._build_title(title),
+                "Category": self._build_select(category),
+                "Content": self._build_rich_text(content),
+                "Importance": self._build_select(importance),
+                "UpdatedAt": self._build_date(),
             }
         )
         return response["id"]
@@ -244,10 +294,10 @@ class NotionService:
             props = page["properties"]
             return {
                 "id": page["id"],
-                "title": props["Name"]["title"][0]["plain_text"] if props["Name"]["title"] else "",
-                "category": props["Category"]["select"]["name"] if props["Category"]["select"] else "",
-                "content": props["Content"]["rich_text"][0]["plain_text"] if props["Content"]["rich_text"] else "",
-                "importance": props["Importance"]["select"]["name"] if props["Importance"]["select"] else "medium"
+                "title": self._parse_title(props, "Name"),
+                "category": self._parse_select(props, "Category"),
+                "content": self._parse_rich_text(props, "Content"),
+                "importance": self._parse_select(props, "Importance", default="medium"),
             }
         return None
 
@@ -269,14 +319,14 @@ class NotionService:
         response = self.client.pages.create(
             parent={"database_id": self.evolution_db_id},
             properties={
-                "Name": {"title": [{"text": {"content": title}}]},
-                "Status": {"select": {"name": "pending"}},
-                "Type": {"select": {"name": task_type}},
-                "Level": {"select": {"name": level}},
-                "Description": {"rich_text": [{"text": {"content": description[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "FilesModified": {"rich_text": [{"text": {"content": files_modified[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "VerificationSteps": {"rich_text": [{"text": {"content": verification_steps[:NOTION_MAX_TEXT_LENGTH]}}]},
-                "CreatedAt": {"date": {"start": datetime.now().isoformat()}},
+                "Name": self._build_title(title),
+                "Status": self._build_select("pending"),
+                "Type": self._build_select(task_type),
+                "Level": self._build_select(level),
+                "Description": self._build_rich_text(description),
+                "FilesModified": self._build_rich_text(files_modified),
+                "VerificationSteps": self._build_rich_text(verification_steps),
+                "CreatedAt": self._build_date(),
             }
         )
         return response["id"]
@@ -314,45 +364,26 @@ class NotionService:
         """Parse a Notion page into an evolution task dict."""
         props = page["properties"]
 
+        # 輔助函數：解析 title 或 rich_text（兩者都可能包含文字）
         def get_text(prop_name: str) -> str:
-            prop = props.get(prop_name, {})
-            if prop.get("rich_text"):
-                return prop["rich_text"][0]["plain_text"] if prop["rich_text"] else ""
-            if prop.get("title"):
-                return prop["title"][0]["plain_text"] if prop["title"] else ""
-            return ""
-
-        def get_select(prop_name: str) -> str:
-            prop = props.get(prop_name, {})
-            if prop.get("select"):
-                return prop["select"]["name"]
-            return ""
-
-        def get_date(prop_name: str) -> Optional[str]:
-            prop = props.get(prop_name, {})
-            if prop.get("date") and prop["date"].get("start"):
-                return prop["date"]["start"]
-            return None
-
-        def get_number(prop_name: str) -> Optional[int]:
-            prop = props.get(prop_name, {})
-            if prop.get("number") is not None:
-                return prop["number"]
-            return None
+            text = self._parse_title(props, prop_name)
+            if not text:
+                text = self._parse_rich_text(props, prop_name)
+            return text
 
         return {
             "id": page["id"],
             "title": get_text("Name"),
-            "status": get_select("Status"),
-            "type": get_select("Type"),
-            "level": get_select("Level"),
+            "status": self._parse_select(props, "Status"),
+            "type": self._parse_select(props, "Type"),
+            "level": self._parse_select(props, "Level"),
             "description": get_text("Description"),
             "files_modified": get_text("FilesModified"),
             "verification_steps": get_text("VerificationSteps"),
-            "created_at": get_date("CreatedAt"),
-            "started_at": get_date("StartedAt"),
-            "completed_at": get_date("CompletedAt"),
-            "duration": get_number("Duration"),
+            "created_at": self._parse_date(props, "CreatedAt"),
+            "started_at": self._parse_date(props, "StartedAt"),
+            "completed_at": self._parse_date(props, "CompletedAt"),
+            "duration": self._parse_number(props, "Duration"),
             "git_tag_pre": get_text("GitTagPre"),
             "git_tag_post": get_text("GitTagPost"),
             "git_commit_hash": get_text("GitCommitHash"),
@@ -369,17 +400,15 @@ class NotionService:
         **kwargs
     ) -> None:
         """Update evolution task status and optional fields."""
-        properties = {
-            "Status": {"select": {"name": status}}
-        }
+        properties = {"Status": self._build_select(status)}
 
         # Handle time tracking
         if status == "executing":
-            properties["StartedAt"] = {"date": {"start": datetime.now().isoformat()}}
+            properties["StartedAt"] = self._build_date()
         elif status in ("completed", "failed", "rolled_back"):
-            properties["CompletedAt"] = {"date": {"start": datetime.now().isoformat()}}
+            properties["CompletedAt"] = self._build_date()
 
-        # Handle optional fields
+        # Handle optional rich_text fields
         field_mappings = {
             "git_tag_pre": "GitTagPre",
             "git_tag_post": "GitTagPost",
@@ -392,11 +421,10 @@ class NotionService:
 
         for kwarg, prop_name in field_mappings.items():
             if kwarg in kwargs and kwargs[kwarg] is not None:
-                value = str(kwargs[kwarg])[:NOTION_MAX_TEXT_LENGTH]
-                properties[prop_name] = {"rich_text": [{"text": {"content": value}}]}
+                properties[prop_name] = self._build_rich_text(str(kwargs[kwarg]))
 
         if "duration" in kwargs and kwargs["duration"] is not None:
-            properties["Duration"] = {"number": kwargs["duration"]}
+            properties["Duration"] = self._build_number(kwargs["duration"])
 
         self.client.pages.update(page_id=page_id, properties=properties)
 
